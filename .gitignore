@@ -1,0 +1,41 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.project
+.classpath
+.settings/
+.factorypath
+bin/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Secrets — admin-api verifies RS256 JWTs; never commit private keys. The public
+# key is supplied via env var (ADMIN_JWT_PUBLIC_KEY) at runtime.
+*.pem
+*.p8
+*-private.key
+
+# k6 / load-test artifacts (raw runs; curated results checked in under load-test/results/<date>/)
+load-test/.k6-cache/
+load-test/results/raw/
