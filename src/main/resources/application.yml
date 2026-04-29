@@ -62,3 +62,22 @@ logging:
     root: INFO
     com.sportsbook.admin: INFO
     org.hibernate.SQL: WARN
+
+# ----------------------------------------------------------------------
+# admin-api operator security (ADR-0011). admin-api VERIFIES JWTs but never
+# issues them — a separate IAM owns issuance; V1 supplies only the public key.
+# ----------------------------------------------------------------------
+admin:
+  security:
+    jwt:
+      # RSA public key (PEM SubjectPublicKeyInfo) for RS256 verification.
+      # REQUIRED — admin-api refuses to start without it. Supplied via env var.
+      public-key: ${ADMIN_JWT_PUBLIC_KEY:}
+      # Claim carrying the operator role (admin / trader / cs / readonly).
+      role-claim: ${ADMIN_JWT_ROLE_CLAIM:role}
+      # Optional: when set, the token issuer is additionally validated.
+      issuer: ${ADMIN_JWT_ISSUER:}
+    # CIDR allowlist for /admin/** (corp network / VPN, ADR-0011). Default =
+    # loopback + RFC 1918 so local dev and in-cluster calls pass; lock down in
+    # production. Comma-separated when overridden via ADMIN_IP_ALLOWLIST.
+    ip-allowlist: ${ADMIN_IP_ALLOWLIST:127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
