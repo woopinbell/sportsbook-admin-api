@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        ADR-0015 baseline: Java 17 + Spring Boot 3.2.x + Maven. Inherits from
+        spring-boot-starter-parent so dependency/plugin versions stay aligned
+        with the Boot BOM. ADR-0016: English commit / English README summary
+        box / Korean docs.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.11</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.sportsbook</groupId>
+    <artifactId>admin-api</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>admin-api</name>
+    <description>
+        Operator-facing REST entry point for the sportsbook system (ADR-0011).
+        A thin authenticated layer: it verifies operator JWTs (RS256, role
+        claim — ADMIN / TRADER / CS / READONLY), enforces an IP allowlist, then
+        delegates each operation (settlement void / replay, wallet refund, risk
+        limit change, market close / reopen) to the owning service's
+        /internal/v1 API, propagating an X-Admin-Actor context. Every action is
+        dual-recorded to a Kafka admin.action topic and a local audit_log table
+        (ADR-0007). No business logic of its own.
+    </description>
+
+    <properties>
+        <java.version>17</java.version>
+        <maven.compiler.release>17</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Aligned with shared-protocol/pom.xml. admin-api consumes the value
+             objects (Money / Currency / UserId / BetId / EventId / MarketId),
+             ErrorCode + ProblemDetail for RFC 7807, and the Avro toolchain.
+             0.2.0 is the current published contract. ADR-0014. -->
+        <shared-protocol.version>0.2.0-SNAPSHOT</shared-protocol.version>
+        <avro.version>1.12.0</avro.version>
+        <avro.plugin.version>1.12.0</avro.plugin.version>
+        <testcontainers.version>1.20.3</testcontainers.version>
+        <!-- Pinned because annotationProcessorPaths does not consult the
+             Spring Boot BOM; keep in sync with the BOM-managed version. -->
+        <lombok.version>1.18.30</lombok.version>
+        <!-- Self-contained (shaded) WireMock so the downstream service stubs in
+             tests do not collide with the app's Jetty / Jackson versions. -->
+        <wiremock.version>3.9.2</wiremock.version>
+
+        <spotless.version>2.43.0</spotless.version>
+        <checkstyle.plugin.version>3.5.0</checkstyle.plugin.version>
+        <checkstyle.version>10.18.2</checkstyle.version>
+
+        <!-- @Tag("load") tests are skipped by default; override empty to run them:
+             mvn test -DexcludedGroups= -Dtest=*LoadTest -->
+        <surefire.excludedGroups>load</surefire.excludedGroups>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- Cross-repo contracts: Money / Currency / UserId / BetId / EventId /
+             MarketId value objects, ErrorCode + ProblemDetail (RFC 7807), and
+             the Avro runtime. Resolved from mavenLocal during dev. -->
+        <dependency>
+            <groupId>com.sportsbook</groupId>
+            <artifactId>shared-protocol</artifactId>
+            <version>${shared-protocol.version}</version>
+        </dependency>
+
+        <!-- Web: the /admin/v1 REST surface + the RestClient used to delegate to
+             each downstream /internal/v1 API. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- Security: operator authn/authz. spring-security with the OAuth2
+             resource server for RS256 JWT verification (public key via env var)
+             and @PreAuthorize role guards (ADR-0011). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Persistence: ADR-0005 — PostgreSQL 16 + Flyway. admin-api touches no
+             business store; the ONLY table it owns is audit_log (ADR-0011). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+
+        <!-- Messaging: ADR-0006 (Kafka) + ADR-0014 (Avro 1.12.x, no Schema
+             Registry in V1). admin-api PUBLISHES the admin.action audit event
+             (AdminActionRecorded, schema owned locally — it is admin-specific
+             and consumed by no other service in V1). -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>${avro.version}</version>
+        </dependency>
+
+        <!-- Observability: ADR-0007. JSON structured logs + OTel exporter +
+             Prometheus scrape via Actuator. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.4</version>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!-- Lombok: boilerplate trim alongside Java 17 records (ADR-0015). -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Test stack: ADR-0015 — JUnit5 + AssertJ + Mockito + Testcontainers. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- spring-security-test: JWT mutators (jwt().authorities(...)) + the
+             SecurityMockMvc post-processors for the authz tests. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- WireMock: stubs each downstream /internal/v1 endpoint so the
+             delegation + header-propagation tests assert what admin-api sends. -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>${wiremock.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- ADR-0014: Avro .avsc -> Java generation for the local
+                 AdminActionRecorded audit event. NO-SOURCE when src/main/avro is
+                 empty (placeholder .gitkeep only). -->
+            <plugin>
+                <groupId>org.apache.avro</groupId>
+                <artifactId>avro-maven-plugin</artifactId>
+                <version>${avro.plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>schemas</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>schema</goal>
+                        </goals>
+                        <configuration>
+                            <sourceDirectory>${project.basedir}/src/main/avro</sourceDirectory>
+                            <outputDirectory>${project.build.directory}/generated-sources/avro</outputDirectory>
+                            <stringType>String</stringType>
+                            <!-- timestamp-millis -> java.time.Instant (default would be Joda). -->
+                            <dateTimeLogicalTypeImplementation>jsr310</dateTimeLogicalTypeImplementation>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Skip @Tag("load") tests in the normal build; run the harness
+                 explicitly with `mvn test -DexcludedGroups= -Dtest=*LoadTest`. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>${surefire.excludedGroups}</excludedGroups>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- Spotless: google-java-format (GOOGLE style, same version as the
+                 other services). Runs on the verify phase; use
+                 `mvn spotless:apply` to auto-format. -->
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <configuration>
+                    <java>
+                        <includes>
+                            <include>src/main/java/**/*.java</include>
+                            <include>src/test/java/**/*.java</include>
+                        </includes>
+                        <googleJavaFormat>
+                            <version>1.22.0</version>
+                            <style>GOOGLE</style>
+                        </googleJavaFormat>
+                        <removeUnusedImports/>
+                        <trimTrailingWhitespace/>
+                        <endWithNewline/>
+                    </java>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals><goal>check</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Checkstyle: shared rule set. Spotless owns layout; this catches
+                 semantic rules (magic numbers, parameter counts, unused imports).
+                 Avro-generated sources live under target/ and are not scanned. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <version>${checkstyle.plugin.version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.puppycrawl.tools</groupId>
+                        <artifactId>checkstyle</artifactId>
+                        <version>${checkstyle.version}</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <configLocation>config/checkstyle/checkstyle.xml</configLocation>
+                    <consoleOutput>true</consoleOutput>
+                    <failOnViolation>true</failOnViolation>
+                    <includeTestSourceDirectory>false</includeTestSourceDirectory>
+                    <sourceDirectories>
+                        <sourceDirectory>${project.basedir}/src/main/java</sourceDirectory>
+                    </sourceDirectories>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>checkstyle-validate</id>
+                        <phase>verify</phase>
+                        <goals><goal>check</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
