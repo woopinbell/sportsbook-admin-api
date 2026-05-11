@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.http.Fault;
+import com.sportsbook.admin.audit.AdminActionPublisher;
+import com.sportsbook.admin.audit.AuditLogRepository;
 import com.sportsbook.admin.client.AdminHeaders;
 import com.sportsbook.admin.support.TestKeys;
 import java.util.UUID;
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -73,6 +76,11 @@ class DelegationTest {
   }
 
   @Autowired private MockMvc mvc;
+
+  // Audit dual-write needs a DB + Kafka, both excluded here — mock it out; this
+  // slice proves delegation. AuditIntegrityTest covers the real dual-write.
+  @MockBean private AuditLogRepository auditLogRepository;
+  @MockBean private AdminActionPublisher adminActionPublisher;
 
   // ----- settlement void: delegate + propagate headers + relay 200 -----
 

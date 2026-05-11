@@ -1,0 +1,18 @@
+{
+  "namespace": "com.sportsbook.admin.event",
+  "type": "record",
+  "name": "AdminActionRecorded",
+  "doc": "An operator action performed through admin-api (ADR-0011). Published to the admin.action topic and mirrored to the audit_log table so an incident can be cross-verified from two independent stores.",
+  "fields": [
+    {"name": "actionId", "type": "string", "doc": "UUID v7 of this action (the audit-log primary key and downstream X-Admin-Action-Id)."},
+    {"name": "actorId", "type": "string", "doc": "Operator id (JWT sub)."},
+    {"name": "actorRole", "type": "string", "doc": "Operator role at action time (ADMIN/TRADER/CS/READONLY), or empty if none."},
+    {"name": "action", "type": "string", "doc": "Action name, e.g. SETTLEMENT_VOID."},
+    {"name": "target", "type": ["null", "string"], "default": null, "doc": "Primary subject of the action (betId / userId / eventId-marketId)."},
+    {"name": "outcome", "type": "string", "doc": "SUCCESS or FAILED."},
+    {"name": "httpStatus", "type": "int", "doc": "HTTP status admin-api returned (relayed downstream status, 403 for denied, etc.)."},
+    {"name": "reason", "type": ["null", "string"], "default": null, "doc": "Operator-supplied reason where applicable (refund / market change)."},
+    {"name": "traceId", "type": ["null", "string"], "default": null, "doc": "W3C trace id correlating this action across services."},
+    {"name": "occurredAt", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the action was recorded (UTC)."}
+  ]
+}

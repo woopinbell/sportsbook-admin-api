@@ -1,5 +1,7 @@
 package com.sportsbook.admin.api;
 
+import com.sportsbook.admin.audit.AdminAction;
+import com.sportsbook.admin.audit.Audited;
 import com.sportsbook.admin.client.MarketClient;
 import com.sportsbook.admin.client.MarketStatusPayload;
 import com.sportsbook.admin.context.AdminContext;
@@ -30,6 +32,10 @@ public class MarketAdminController {
 
   @PostMapping("/close")
   @PreAuthorize("hasAnyRole('ADMIN','TRADER')")
+  @Audited(
+      value = AdminAction.MARKET_CLOSE,
+      target = "#eventId + '/' + #marketId",
+      reason = "#payload.reason()")
   public ResponseEntity<Void> close(
       @PathVariable UUID eventId,
       @PathVariable UUID marketId,
@@ -41,6 +47,10 @@ public class MarketAdminController {
 
   @PostMapping("/reopen")
   @PreAuthorize("hasAnyRole('ADMIN','TRADER')")
+  @Audited(
+      value = AdminAction.MARKET_REOPEN,
+      target = "#eventId + '/' + #marketId",
+      reason = "#payload.reason()")
   public ResponseEntity<Void> reopen(
       @PathVariable UUID eventId,
       @PathVariable UUID marketId,

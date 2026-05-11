@@ -1,5 +1,7 @@
 package com.sportsbook.admin.api;
 
+import com.sportsbook.admin.audit.AdminAction;
+import com.sportsbook.admin.audit.Audited;
 import com.sportsbook.admin.client.WalletClient;
 import com.sportsbook.admin.context.AdminContext;
 import com.sportsbook.protocol.value.Money;
@@ -28,6 +30,7 @@ public class WalletAdminController {
 
   @PostMapping("/{userId}/refund")
   @PreAuthorize("hasAnyRole('ADMIN','CS')")
+  @Audited(value = AdminAction.WALLET_REFUND, target = "#userId", reason = "#request.reason()")
   public RefundResponse refund(
       @PathVariable UUID userId, @Valid @RequestBody RefundRequest request, AdminContext context) {
     Money amount = new Money(request.amount(), request.currency());

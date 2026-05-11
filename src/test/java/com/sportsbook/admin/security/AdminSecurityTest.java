@@ -5,11 +5,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.sportsbook.admin.audit.AdminActionPublisher;
+import com.sportsbook.admin.audit.AuditLogRepository;
 import com.sportsbook.admin.support.TestKeys;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -50,6 +53,11 @@ class AdminSecurityTest {
   }
 
   @Autowired private MockMvc mvc;
+
+  // The audit layer needs a DB + Kafka, both excluded here — mock it out; this
+  // slice proves auth, not auditing (AuditIntegrityTest covers the dual-write).
+  @MockBean private AuditLogRepository auditLogRepository;
+  @MockBean private AdminActionPublisher adminActionPublisher;
 
   @Test
   void validTokenAuthenticatesAndExposesActor() throws Exception {

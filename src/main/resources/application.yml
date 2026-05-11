@@ -29,6 +29,12 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
 
+  # ADR-0006: Kafka for the admin.action audit stream. admin-api only produces
+  # (byte[] Avro values); the producer factory is built in AuditKafkaConfig from
+  # this bootstrap address.
+  kafka:
+    bootstrap-servers: ${ADMIN_KAFKA_BOOTSTRAP:localhost:9092}
+
 server:
   # Port allocation across sportsbook services (the running set diverged from
   # the early plan): wallet 8081, betting 8082, risk 8083, settlement 8084,
@@ -91,3 +97,8 @@ admin:
     odds-feed-base-url: ${ODDS_FEED_BASE_URL:http://localhost:8085}
     connect-timeout: 200ms
     read-timeout: 2s
+
+  # Audit trail (ADR-0011): every admin action is dual-recorded to this Kafka
+  # topic and the audit_log table.
+  audit:
+    topic: ${ADMIN_AUDIT_TOPIC:admin.action}

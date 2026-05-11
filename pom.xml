@@ -107,6 +107,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
+        <!-- AOP: weaves the @Audited aspect that dual-records every admin action
+             (ADR-0011). Also brings aspectjweaver for the @Around advice. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
 
         <!-- Persistence: ADR-0005 — PostgreSQL 16 + Flyway. admin-api touches no
              business store; the ONLY table it owns is audit_log (ADR-0011). -->
