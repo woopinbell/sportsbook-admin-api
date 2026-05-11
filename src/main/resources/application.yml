@@ -81,3 +81,13 @@ admin:
     # loopback + RFC 1918 so local dev and in-cluster calls pass; lock down in
     # production. Comma-separated when overridden via ADMIN_IP_ALLOWLIST.
     ip-allowlist: ${ADMIN_IP_ALLOWLIST:127.0.0.1/32,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+
+  # Downstream /internal/v1 services admin-api delegates to (ADR-0011). Defaults
+  # match the running local port allocation; overridden per environment.
+  downstream:
+    settlement-base-url: ${SETTLEMENT_BASE_URL:http://localhost:8084}
+    wallet-base-url: ${WALLET_BASE_URL:http://localhost:8081}
+    risk-base-url: ${RISK_BASE_URL:http://localhost:8083}
+    odds-feed-base-url: ${ODDS_FEED_BASE_URL:http://localhost:8085}
+    connect-timeout: 200ms
+    read-timeout: 2s
