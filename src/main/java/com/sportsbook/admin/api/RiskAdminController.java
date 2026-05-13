@@ -1,5 +1,7 @@
 package com.sportsbook.admin.api;
 
+import com.sportsbook.admin.audit.AdminAction;
+import com.sportsbook.admin.audit.Audited;
 import com.sportsbook.admin.client.RiskClient;
 import com.sportsbook.admin.client.RiskLimitPayload;
 import com.sportsbook.admin.context.AdminContext;
@@ -28,6 +30,10 @@ public class RiskAdminController {
 
   @PatchMapping("/{userId}/limits")
   @PreAuthorize("hasAnyRole('ADMIN','TRADER')")
+  @Audited(
+      value = AdminAction.RISK_LIMIT_UPDATE,
+      target = "#userId",
+      reason = "#payload.limitType()")
   public ResponseEntity<Void> updateLimits(
       @PathVariable String userId,
       @Valid @RequestBody RiskLimitPayload payload,

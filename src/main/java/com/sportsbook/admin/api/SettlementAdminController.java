@@ -1,5 +1,7 @@
 package com.sportsbook.admin.api;
 
+import com.sportsbook.admin.audit.AdminAction;
+import com.sportsbook.admin.audit.Audited;
 import com.sportsbook.admin.client.SettlementClient;
 import com.sportsbook.admin.context.AdminContext;
 import java.util.UUID;
@@ -27,6 +29,7 @@ public class SettlementAdminController {
   /** Manually void a bet and refund its stake. */
   @PostMapping("/{betId}/void")
   @PreAuthorize("hasAnyRole('ADMIN','TRADER')")
+  @Audited(value = AdminAction.SETTLEMENT_VOID, target = "#betId")
   public ResponseEntity<Void> voidBet(@PathVariable UUID betId, AdminContext context) {
     ResponseEntity<Void> downstream = settlementClient.voidBet(betId, context);
     return ResponseEntity.status(downstream.getStatusCode()).build();
@@ -35,6 +38,7 @@ public class SettlementAdminController {
   /** Replay an event's settlement (e.g. after a DLQ drain or a late correction). */
   @PostMapping("/replay/{eventId}")
   @PreAuthorize("hasAnyRole('ADMIN','TRADER')")
+  @Audited(value = AdminAction.SETTLEMENT_REPLAY, target = "#eventId")
   public ResponseEntity<Void> replay(@PathVariable UUID eventId, AdminContext context) {
     ResponseEntity<Void> downstream = settlementClient.replay(eventId, context);
     return ResponseEntity.status(downstream.getStatusCode()).build();
