@@ -45,11 +45,20 @@
 > stubs). `shared-protocol` 0.2.0 must be installed to mavenLocal first
 > (`cd ../shared-protocol && mvn install`).
 >
-> **Security focus.** admin-api is the security-critical surface, so the proof
-> emphasis is on authz and audit integrity rather than throughput: JWT tampering
-> / expiry / insufficient-role → 401 / 403, IP-bypass attempts, SQL-injection
-> attempts on the audit query, and a check that every action lands identically
-> in Kafka and the DB. Operational load is low (~10 operators).
+> **Security focus & proofs.** admin-api is the security-critical surface, so the
+> proof emphasis is on authz and audit integrity rather than throughput
+> (operational load is low — ~10 operators). All of the following are green and
+> reproducible with `mvn verify` (28 tests):
+> - **AuthN/Z** — forged / expired / wrong-key / tampered / missing token → 401;
+>   insufficient role → 403; disallowed source IP → 403 (even with a valid token).
+> - **JWT algorithm confusion** — an `alg=none` token and an RS256→HS256 token
+>   (HMAC-signed with the RSA public key) are both rejected by the RS256-pinned
+>   decoder. This is the attack a naive verifier fails.
+> - **SQL injection** — the audit-log `actor` filter is parameterized JPQL, so
+>   `' OR '1'='1` matches zero rows instead of leaking the table.
+> - **Audit integrity** — against real PostgreSQL (Testcontainers) + an embedded
+>   Kafka broker, every action is shown to land identically in `audit_log` and the
+>   `admin.action` topic, matched by action id; failed actions are recorded FAILED.
 >
 > **Limitations (V1).** Account suspend / unsuspend is **not exposed** — there is
 > no user-service to delegate to in V1 and admin-api may not own business state
@@ -58,8 +67,10 @@
 > public key via env var). See ADR-0011 / 0004 / 0007 in
 > `orchestration/docs/architecture/decisions/`.
 >
-> **Docs.** Per-commit walkthroughs and the post-build retrospective live in
-> [`docs/`](docs/README.md) once written.
+> **Docs.** Per-commit walkthroughs (`docs/commits/`, one page per dev commit)
+> and the post-build retrospective (`docs/reflection/`) live in
+> [`docs/`](docs/README.md). The interview-critical topics are indexed under "L3
+> quick reference" in [`docs/commits/README.md`](docs/commits/README.md).
 
 ---
 
@@ -141,9 +152,32 @@ mvn spring-boot:run   # 로컬 실행 (Postgres + Kafka 필요)
 
 ## 성능 / 보안
 
-운영 부하는 낮다 (운영자 ~10명, 분당 ~수십 건). 따라서 증명의 무게는 처리량이
-아니라 **보안과 감사 무결성**에 둔다 — 자세한 수치는 dev 완료 후
-[`load-test/results/BEST.md`](load-test/results/BEST.md)와 본 절에 박제한다.
+운영 부하는 낮다 (운영자 ~10명, 분당 ~수십 건, ADR-0011). 따라서 증명의 무게는
+처리량이 아니라 **보안과 감사 무결성**에 둔다. 아래는 모두 `mvn verify`로 재현된다
+(Testcontainers 사용 → Docker 필요).
+
+### 보안 (security-critical)
+
+| 공격 시도 | 기대 | 검증 테스트 |
+|---|---|---|
+| 토큰 없음 / 만료 / 위조 서명 / 다른 키 서명 / malformed | 401 | `AdminSecurityTest` |
+| `alg=none` 토큰 (서명 제거) | 401 | `SecurityProbeTest` |
+| RS256→HS256 알고리즘 혼동 (공개키를 HMAC 비밀키로 서명) | 401 | `SecurityProbeTest` |
+| 권한 부족 role | 403 | `AdminSecurityTest`, `DelegationTest` |
+| allowlist 밖 IP (유효 토큰이어도) | 403 | `AdminSecurityTest`, `SecurityProbeTest` |
+| audit-log `actor` 필터 SQL injection | 무력화 (parameterized JPQL) | `SecurityProbeTest` |
+
+### 감사 무결성 (audit integrity)
+
+모든 admin 액션은 `audit_log` 테이블과 Kafka `admin.action`에 **동일하게 이중 박제**
+되고 action id로 cross-verify된다. 권한 거부·다운스트림 실패(404 등) 같은 실패한
+시도도 `FAILED`로 기록된다. `AuditIntegrityTest`(실제 PostgreSQL + embedded Kafka)가
+양쪽 적재 일치를 증명한다.
+
+### 부하 (낮은 우선순위)
+
+k6 경량 baseline harness는 [`load-test/`](load-test/README.md)에 있다. 운영 부하가
+낮아 측정 수치는 후순위 — 자세한 건 [`load-test/results/BEST.md`](load-test/results/BEST.md).
 
 ## 의존 버전
 
