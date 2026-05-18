@@ -2,8 +2,10 @@ package com.sportsbook.admin.support;
 
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.PlainJWT;
 import com.nimbusds.jwt.SignedJWT;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -62,6 +64,35 @@ public final class TestKeys {
   /** A token signed by the untrusted key — a valid JWS that admin-api must not accept. */
   public static String wrongKeyToken(String subject, String role) {
     return mint(OTHER, subject, role, Instant.now().plusSeconds(DEFAULT_TTL_SECONDS));
+  }
+
+  /** An unsigned {@code alg=none} token — the classic "drop the signature" attack. */
+  public static String noneAlgToken(String subject, String role) {
+    return new PlainJWT(claims(subject, role)).serialize();
+  }
+
+  /**
+   * RS256 -> HS256 algorithm-confusion attack: an HMAC token whose secret is the (public) RSA key
+   * bytes. A naive verifier that keys HMAC off the configured "public key" would accept it; an
+   * RS256-pinned decoder must not.
+   */
+  public static String hmacWithPublicKeyToken(String subject, String role) {
+    try {
+      SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims(subject, role));
+      jwt.sign(new MACSigner(TRUSTED.getPublic().getEncoded()));
+      return jwt.serialize();
+    } catch (Exception e) {
+      throw new IllegalStateException("HMAC token minting failed", e);
+    }
+  }
+
+  private static JWTClaimsSet claims(String subject, String role) {
+    return new JWTClaimsSet.Builder()
+        .subject(subject)
+        .claim("role", role)
+        .issueTime(Date.from(Instant.now().minusSeconds(10)))
+        .expirationTime(Date.from(Instant.now().plusSeconds(DEFAULT_TTL_SECONDS)))
+        .build();
   }
 
   private static String mint(KeyPair keyPair, String subject, String role, Instant expiry) {
