@@ -1,5 +1,6 @@
 package com.sportsbook.admin.api;
 
+import static com.sportsbook.admin.security.AuthorizationTestSupport.validBearer;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -93,7 +94,7 @@ class DelegationTest {
 
     mvc.perform(
             post("/admin/v1/settlements/{betId}/void", betId)
-                .header(AUTHORIZATION, bearer("u-admin-1", "ADMIN")))
+                .header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN")))
         .andExpect(status().isOk());
 
     WM.verify(
@@ -114,7 +115,7 @@ class DelegationTest {
 
     mvc.perform(
             post("/admin/v1/settlements/replay/{eventId}", eventId)
-                .header(AUTHORIZATION, bearer("u-trader-1", "TRADER")))
+                .header(AUTHORIZATION, validBearer("u-trader-1", "TRADER")))
         .andExpect(status().isAccepted());
   }
 
@@ -131,7 +132,7 @@ class DelegationTest {
 
     mvc.perform(
             post("/admin/v1/wallet/{userId}/refund", userId)
-                .header(AUTHORIZATION, bearer("u-cs-1", "CS"))
+                .header(AUTHORIZATION, validBearer("u-cs-1", "CS"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"amount\":10000,\"currency\":\"KRW\",\"reason\":\"goodwill\"}"))
         .andExpect(status().isOk())
@@ -160,7 +161,7 @@ class DelegationTest {
 
     mvc.perform(
             patch("/admin/v1/risk/users/{userId}/limits", userId)
-                .header(AUTHORIZATION, bearer("u-trader-1", "TRADER"))
+                .header(AUTHORIZATION, validBearer("u-trader-1", "TRADER"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"limitType\":\"DAILY_STAKE\",\"currency\":\"KRW\",\"amount\":500000}"))
         .andExpect(status().isNoContent());
@@ -184,7 +185,7 @@ class DelegationTest {
 
     mvc.perform(
             post("/admin/v1/events/{eventId}/markets/{marketId}/close", eventId, marketId)
-                .header(AUTHORIZATION, bearer("u-trader-1", "TRADER"))
+                .header(AUTHORIZATION, validBearer("u-trader-1", "TRADER"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reason\":\"suspected pricing error\"}"))
         .andExpect(status().isAccepted());
@@ -202,7 +203,7 @@ class DelegationTest {
   void csCannotVoidSettlement() throws Exception {
     mvc.perform(
             post("/admin/v1/settlements/{betId}/void", UUID.randomUUID())
-                .header(AUTHORIZATION, bearer("u-cs-1", "CS")))
+                .header(AUTHORIZATION, validBearer("u-cs-1", "CS")))
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
     WM.verify(0, WireMock.postRequestedFor(WireMock.urlPathMatching("/internal/.*")));
@@ -212,7 +213,7 @@ class DelegationTest {
   void traderCannotRefund() throws Exception {
     mvc.perform(
             post("/admin/v1/wallet/{userId}/refund", UUID.randomUUID())
-                .header(AUTHORIZATION, bearer("u-trader-1", "TRADER"))
+                .header(AUTHORIZATION, validBearer("u-trader-1", "TRADER"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"amount\":10000,\"currency\":\"KRW\",\"reason\":\"x\"}"))
         .andExpect(status().isForbidden());
@@ -236,7 +237,7 @@ class DelegationTest {
 
     mvc.perform(
             post("/admin/v1/settlements/{betId}/void", betId)
-                .header(AUTHORIZATION, bearer("u-admin-1", "ADMIN")))
+                .header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN")))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.errorCode").value("NOT_FOUND"));
   }
@@ -250,7 +251,7 @@ class DelegationTest {
 
     mvc.perform(
             post("/admin/v1/settlements/{betId}/void", betId)
-                .header(AUTHORIZATION, bearer("u-admin-1", "ADMIN")))
+                .header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN")))
         .andExpect(status().isBadGateway())
         .andExpect(jsonPath("$.errorCode").value("BAD_GATEWAY"));
   }
@@ -264,12 +265,8 @@ class DelegationTest {
 
     mvc.perform(
             post("/admin/v1/settlements/replay/{eventId}", eventId)
-                .header(AUTHORIZATION, bearer("u-admin-1", "ADMIN")))
+                .header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN")))
         .andExpect(status().isGatewayTimeout())
         .andExpect(jsonPath("$.errorCode").value("GATEWAY_TIMEOUT"));
-  }
-
-  private static String bearer(String subject, String role) {
-    return "Bearer " + TestKeys.validToken(subject, role);
   }
 }

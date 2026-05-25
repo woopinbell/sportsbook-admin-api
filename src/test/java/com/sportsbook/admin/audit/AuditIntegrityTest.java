@@ -1,5 +1,6 @@
 package com.sportsbook.admin.audit;
 
+import static com.sportsbook.admin.security.AuthorizationTestSupport.validBearer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -106,7 +107,7 @@ class AuditIntegrityTest {
 
     mvc.perform(
             post("/admin/v1/settlements/{betId}/void", betId)
-                .header(AUTHORIZATION, bearer("u-admin-1", "ADMIN")))
+                .header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN")))
         .andExpect(status().isOk());
 
     // DB copy.
@@ -140,7 +141,7 @@ class AuditIntegrityTest {
 
     mvc.perform(
             post("/admin/v1/settlements/{betId}/void", betId)
-                .header(AUTHORIZATION, bearer("u-trader-1", "TRADER")))
+                .header(AUTHORIZATION, validBearer("u-trader-1", "TRADER")))
         .andExpect(status().isNotFound());
 
     List<AuditLogEntity> rows = auditLog.findAll();
@@ -159,15 +160,16 @@ class AuditIntegrityTest {
 
     mvc.perform(
             post("/admin/v1/settlements/{betId}/void", firstBet)
-                .header(AUTHORIZATION, bearer("u-admin-1", "ADMIN")))
+                .header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN")))
         .andExpect(status().isOk());
     mvc.perform(
             post("/admin/v1/settlements/{betId}/void", secondBet)
-                .header(AUTHORIZATION, bearer("u-admin-1", "ADMIN")))
+                .header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN")))
         .andExpect(status().isOk());
 
     mvc.perform(
-            get("/admin/v1/audit-logs").header(AUTHORIZATION, bearer("u-readonly-1", "READONLY")))
+            get("/admin/v1/audit-logs")
+                .header(AUTHORIZATION, validBearer("u-readonly-1", "READONLY")))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.totalElements").value(2))
         .andExpect(jsonPath("$.items.length()").value(2))
@@ -208,9 +210,5 @@ class AuditIntegrityTest {
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
-  }
-
-  private static String bearer(String subject, String role) {
-    return "Bearer " + TestKeys.validToken(subject, role);
   }
 }

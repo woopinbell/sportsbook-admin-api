@@ -1,5 +1,7 @@
 package com.sportsbook.admin.security;
 
+import static com.sportsbook.admin.security.AuthorizationTestSupport.bearer;
+import static com.sportsbook.admin.security.AuthorizationTestSupport.validBearer;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -77,7 +79,7 @@ class SecurityProbeTest {
     mvc.perform(
             get("/admin/v1/audit-logs")
                 .param("actor", "u-real-operator")
-                .header(AUTHORIZATION, bearer("u-admin-1", "ADMIN")))
+                .header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN")))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.totalElements").value(1));
 
@@ -86,7 +88,7 @@ class SecurityProbeTest {
     mvc.perform(
             get("/admin/v1/audit-logs")
                 .param("actor", "' OR '1'='1")
-                .header(AUTHORIZATION, bearer("u-admin-1", "ADMIN")))
+                .header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN")))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.totalElements").value(0));
   }
@@ -95,7 +97,7 @@ class SecurityProbeTest {
   void algNoneTokenIsRejected() throws Exception {
     mvc.perform(
             get("/admin/v1/whoami")
-                .header(AUTHORIZATION, "Bearer " + TestKeys.noneAlgToken("u-attacker", "ADMIN")))
+                .header(AUTHORIZATION, bearer(TestKeys.noneAlgToken("u-attacker", "ADMIN"))))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
   }
@@ -105,8 +107,7 @@ class SecurityProbeTest {
     mvc.perform(
             get("/admin/v1/whoami")
                 .header(
-                    AUTHORIZATION,
-                    "Bearer " + TestKeys.hmacWithPublicKeyToken("u-attacker", "ADMIN")))
+                    AUTHORIZATION, bearer(TestKeys.hmacWithPublicKeyToken("u-attacker", "ADMIN"))))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
   }
@@ -115,7 +116,7 @@ class SecurityProbeTest {
   void requestFromDisallowedIpIsRejectedEvenWithValidToken() throws Exception {
     mvc.perform(
             get("/admin/v1/whoami")
-                .header(AUTHORIZATION, bearer("u-admin-1", "ADMIN"))
+                .header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN"))
                 .with(
                     request -> {
                       request.setRemoteAddr("203.0.113.7");
@@ -123,9 +124,5 @@ class SecurityProbeTest {
                     }))
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.errorCode").value("IP_NOT_ALLOWED"));
-  }
-
-  private static String bearer(String subject, String role) {
-    return "Bearer " + TestKeys.validToken(subject, role);
   }
 }

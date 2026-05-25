@@ -1,5 +1,10 @@
 package com.sportsbook.admin.security;
 
+import static com.sportsbook.admin.security.AuthorizationTestSupport.bearer;
+import static com.sportsbook.admin.security.AuthorizationTestSupport.tamperSignature;
+import static com.sportsbook.admin.security.AuthorizationTestSupport.validBearer;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -61,8 +66,7 @@ class AdminSecurityTest {
 
   @Test
   void validTokenAuthenticatesAndExposesActor() throws Exception {
-    mvc.perform(
-            get(WHOAMI).header(AUTHORIZATION, bearer(TestKeys.validToken("u-admin-1", "ADMIN"))))
+    mvc.perform(get(WHOAMI).header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN")))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value("u-admin-1"))
         .andExpect(jsonPath("$.role").value("ADMIN"));
@@ -93,7 +97,17 @@ class AdminSecurityTest {
 
   @Test
   void tamperedSignatureIsUnauthorized() throws Exception {
-    String tampered = tamperSignature(TestKeys.validToken("u-admin-1", "ADMIN"));
+    String valid = TestKeys.validToken("u-admin-1", "ADMIN");
+    String tampered = tamperSignature(valid);
+    String[] validSegments = valid.split("\\.", -1);
+    String[] tamperedSegments = tampered.split("\\.", -1);
+
+    assertEquals(3, validSegments.length);
+    assertEquals(3, tamperedSegments.length);
+    assertEquals(validSegments[0], tamperedSegments[0]);
+    assertEquals(validSegments[1], tamperedSegments[1]);
+    assertNotEquals(validSegments[2], tamperedSegments[2]);
+
     mvc.perform(get(WHOAMI).header(AUTHORIZATION, bearer(tampered)))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
@@ -108,18 +122,14 @@ class AdminSecurityTest {
 
   @Test
   void insufficientRoleIsForbidden() throws Exception {
-    mvc.perform(
-            get(ADMIN_ONLY)
-                .header(AUTHORIZATION, bearer(TestKeys.validToken("u-trader-1", "TRADER"))))
+    mvc.perform(get(ADMIN_ONLY).header(AUTHORIZATION, validBearer("u-trader-1", "TRADER")))
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.errorCode").value("FORBIDDEN"));
   }
 
   @Test
   void sufficientRoleIsAllowed() throws Exception {
-    mvc.perform(
-            get(ADMIN_ONLY)
-                .header(AUTHORIZATION, bearer(TestKeys.validToken("u-admin-1", "ADMIN"))))
+    mvc.perform(get(ADMIN_ONLY).header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN")))
         .andExpect(status().isOk());
   }
 
@@ -129,7 +139,7 @@ class AdminSecurityTest {
     // rejects it before authentication even runs.
     mvc.perform(
             get(WHOAMI)
-                .header(AUTHORIZATION, bearer(TestKeys.validToken("u-admin-1", "ADMIN")))
+                .header(AUTHORIZATION, validBearer("u-admin-1", "ADMIN"))
                 .with(
                     request -> {
                       request.setRemoteAddr("8.8.8.8");
@@ -137,21 +147,6 @@ class AdminSecurityTest {
                     }))
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.errorCode").value("IP_NOT_ALLOWED"));
-  }
-
-  private static String bearer(String token) {
-    return "Bearer " + token;
-  }
-
-  /**
-   * Flips the first byte of the JWS signature so verification fails while the JWT stays
-   * well-formed.
-   */
-  private static String tamperSignature(String token) {
-    String[] parts = token.split("\\.");
-    char first = parts[2].charAt(0);
-    parts[2] = (first == 'A' ? 'B' : 'A') + parts[2].substring(1);
-    return parts[0] + "." + parts[1] + "." + parts[2];
   }
 
   /**
