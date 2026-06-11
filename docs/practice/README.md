@@ -22,6 +22,7 @@
 
 - **`000` chore(project)** — 형제 service의 검증된 pom/checkstyle/logback을 **그대로 따른** 골격이다. 재유도할 설계가 아니라 일관성 복사라 문제지를 만들면 템플릿 빈칸 채우기(공회전)가 된다. 답지 `../commits/000.md`만 둔다.
 - **`006` docs(readme)** — 순수 문서 커밋(README 보안/성능 절). 재유도할 실체가 없어 답지만 둔다.
+- **`007` build(maven)** (phase 2) — risk-service maven wrapper 3파일 **동일본 체크인**(저작 코드 0줄). 재유도할 실체가 없어 답지만 둔다.
 
 ## 구간 지도
 
