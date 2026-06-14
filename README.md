@@ -78,7 +78,9 @@
 
 `admin-api`는 9개 repo로 구성된 sportsbook 시스템의 **운영자 전용 진입점**이다.
 사용자용 `gateway`와 완전히 분리되어, 운영자 인증·라우팅·사고 영향 범위를
-격리한다 (분리 근거: [ADR-0011](../orchestration/docs/architecture/decisions/0011-admin-api-separation.md)).
+격리한다 (분리 근거: ADR-0011).
+
+> 시스템 전체 설계는 orchestration 레포의 docs/DESIGN.md에 있습니다.
 
 ```
 운영자 (admin / trader / cs)
